@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "build": {
+    "beforeBuildCommand": "mkdir dist | echo ' '",
+    "devPath": "https://music.youtube.com",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "ytmusic_desktop",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      }
+    },
+    "windows": [
+      {
+        "title": "Youtube Music",
+        "label": "main",
+        "url": "https://music.youtube.com",
+        "theme": null
+      }
+    ],
+    "security": {
+      "csp": null,
+      "dangerousRemoteDomainIpcAccess": [
+        {
+          "windows": ["main"],
+          "domain": "music.youtube.com",
+          "enableTauriAPI": true
+        }
+      ]
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.thedtvn.ytmusic",
+      "icon": [
+        "icons/icon.ico",
+        "icons/icon.png"
+      ]
+    }
+  }
+}
