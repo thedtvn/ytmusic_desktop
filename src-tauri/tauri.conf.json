@@ -6,7 +6,7 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "ytmusic_desktop",
+    "productName": "Youtube Music",
     "version": "0.1.0"
   },
   "tauri": {
