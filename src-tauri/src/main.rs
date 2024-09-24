@@ -26,6 +26,7 @@ fn create_tray() -> SystemTray {
 fn create_discord_rpc() -> UnboundedSender<PlayerState> {
     let mut drpc = discord_rpc_client::Client::new(1049275932239728672);
     drpc.start();
+    drpc.set_activity(|a| a.details("idle not playing").timestamps(|x| x.end(0))).unwrap();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<PlayerState>();
     async_runtime::spawn(async move {
         while let Some(data) = rx.recv().await {
