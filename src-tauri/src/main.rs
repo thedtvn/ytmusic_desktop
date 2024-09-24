@@ -41,13 +41,14 @@ fn create_discord_rpc() -> UnboundedSender<PlayerState> {
             let mut drpc = drpc.clone();
             let _ = std::thread::spawn(move || {
                 if data.is_distroyed {
-                    drpc.set_activity(|a| a.details("idle not playing").timestamps(|x| x.end(0))).unwrap();
+                    drpc.set_activity(|a| a.details("idle not playing")).unwrap();
                 } else {
                     let video_data = data.video_data.unwrap();
                     drpc.set_activity(|a| {
-                        let b = a
+                        a
                             .instance(true)
-                            .details(&format!("{} - {}", video_data.title, video_data.artist))
+                            .details(if data.is_playing { "Playing" } else { "Paused" })
+                            .state(&format!("{} - {}", video_data.title, video_data.artist))
                             .assets(|ass| {
                                 ass.large_image(&video_data.album_art)
                                     .small_image(if data.is_playing { "play" } else { "pause" })
@@ -60,12 +61,7 @@ fn create_discord_rpc() -> UnboundedSender<PlayerState> {
                                 } else {
                                     ts
                                 }
-                            });
-                        if data.is_playing {
-                            b.buttons(|x| x.add_button("Music Link", &video_data.url))
-                        } else {
-                            b.state("music paused")
-                        }
+                            }).buttons(|x| x.add_button("Music Link", &video_data.url))
                     })
                     .unwrap();
                 }
