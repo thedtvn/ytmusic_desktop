@@ -47,7 +47,7 @@ fn create_discord_rpc() -> UnboundedSender<PlayerState> {
                                 let start = get_sys_time_in_secs() - video_data.current_duration as u64;
                                 let end = start + video_data.duration as u64;
                                 if data.is_playing {
-                                    ts.start(start).end(end)
+                                    ts.end(end)
                                 } else {
                                     ts
                                 }
