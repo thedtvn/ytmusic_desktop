@@ -32,9 +32,11 @@ fn create_discord_rpc() -> UnboundedSender<PlayerState> {
             let mut drpc = drpc.clone();
             let _ = std::thread::spawn(move || {
                 if data.is_distroyed {
+                    drpc.clear_activity().unwrap();
                     drpc.set_activity(|a| a.details("idle not playing").timestamps(|x| x.end(0))).unwrap();
                 } else {
                     let video_data = data.video_data.unwrap();
+                    drpc.clear_activity().unwrap();
                     drpc.set_activity(|a| {
                         let b = a
                             .instance(true)
