@@ -25,8 +25,13 @@ fn create_tray() -> SystemTray {
 
 fn create_discord_rpc() -> UnboundedSender<PlayerState> {
     let mut drpc = discord_rpc_client::Client::new(1049275932239728672);
+    let drpc_event_cl = drpc.clone();
     drpc.on_ready(|_| {
         println!("Discord RPC Ready");
+    });
+    drpc.on_error(move |_| {
+        let mut drpc_cl = drpc_event_cl.clone();
+        drpc_cl.start();
     });
     drpc.start();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<PlayerState>();
