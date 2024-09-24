@@ -32,7 +32,7 @@ fn create_discord_rpc() -> UnboundedSender<PlayerState> {
             let mut drpc = drpc.clone();
             let _ = std::thread::spawn(move || {
                 if data.is_distroyed {
-                    drpc.set_activity(|a| a.details("idle not playing")).unwrap();
+                    drpc.set_activity(|a| a.details("idle not playing").timestamps(|x| x.end(0))).unwrap();
                 } else {
                     let video_data = data.video_data.unwrap();
                     drpc.set_activity(|a| {
@@ -47,7 +47,7 @@ fn create_discord_rpc() -> UnboundedSender<PlayerState> {
                                 let start = get_sys_time_in_secs() - video_data.current_duration as u64;
                                 let end = start + video_data.duration as u64;
                                 if data.is_playing {
-                                    ts.end(end)
+                                    ts.start(start).end(end)
                                 } else {
                                     ts
                                 }

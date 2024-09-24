@@ -40,7 +40,7 @@ function get_video_info() {
         artist: info.author,
         duration: ytplayerapi.getDuration(),
         current_duration: ytplayerapi.getCurrentTime(),
-        url: ytplayerapi.getVideoUrl(),
+        url: `https://music.youtube.com/watch?v=${info.video_id}`,
         album_art: get_video_image()
     };
 }
