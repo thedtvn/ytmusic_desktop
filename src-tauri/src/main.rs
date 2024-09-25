@@ -1,14 +1,20 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-
 use tauri::{
-    async_runtime::{self},
     CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{Mutex, RwLock};
 
-use std::time::SystemTime;
+use std::{sync::Arc, time::SystemTime};
+
+use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
+
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref DRPC_CLIENT: Arc<Mutex<DiscordIpcClient>> = Arc::new(Mutex::new(DiscordIpcClient::new("1049275932239728672").unwrap()));
+    static ref PLAYER_STATE: Arc<RwLock<Option<PlayerState>>> = Arc::new(RwLock::new(None));
+}
 
 fn get_sys_time_in_secs() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
@@ -23,52 +29,35 @@ fn create_tray() -> SystemTray {
     SystemTray::new().with_menu(tray_menu)
 }
 
-fn create_discord_rpc() -> UnboundedSender<PlayerState> {
-    let mut drpc = discord_rpc_client::Client::new(1049275932239728672);
-    let drpc_event_cl = drpc.clone();
-    drpc.on_ready(|_| {
-        println!("Discord RPC Ready");
-    });
-    drpc.on_error(move |_| {
-        let mut drpc_cl = drpc_event_cl.clone();
-        drpc_cl.start();
-    });
-    drpc.start();
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<PlayerState>();
-    async_runtime::spawn(async move {
-        while let Some(data) = rx.recv().await {
-            println!("Update state: {:?}", data);
-            let mut drpc = drpc.clone();
-            let _ = std::thread::spawn(move || {
-                if data.is_distroyed {
-                    drpc.set_activity(|a| a.details("idle not playing")).unwrap();
-                } else {
-                    let video_data = data.video_data.unwrap();
-                    drpc.set_activity(|a| {
-                        a
-                            .instance(true)
-                            .details(if data.is_playing { "Playing" } else { "Paused" })
-                            .state(&format!("{} - {}", video_data.title, video_data.artist))
-                            .assets(|ass| {
-                                ass.large_image(&video_data.album_art)
-                                    .small_image(if data.is_playing { "play" } else { "pause" })
-                            })
-                            .timestamps(|ts| {
-                                let start = get_sys_time_in_secs() - video_data.current_duration as u64;
-                                let end = start + video_data.duration as u64;
-                                if data.is_playing {
-                                    ts.start(start).end(end)
-                                } else {
-                                    ts
-                                }
-                            }).buttons(|x| x.add_button("Music Link", &video_data.url))
-                    })
-                    .unwrap();
-                }
-            });
-        }
-    });
-    tx
+fn update_status(data: PlayerState) {
+    println!("Update state: {:?}", data);
+    let status_activity = activity::Activity::new();
+    if data.is_distroyed {
+        DRPC_CLIENT.blocking_lock().set_activity(status_activity.details("idle not playing")).unwrap();
+    } else {
+        let video_data = data.video_data.unwrap();
+        let acess = activity::Assets::new();
+        let time_stam = activity::Timestamps::new();
+        let start = get_sys_time_in_secs() - video_data.current_duration as u64;
+        let end = start + video_data.duration as u64;
+        DRPC_CLIENT.blocking_lock().set_activity(
+            status_activity.details("idle not playing")
+                .details(if data.is_playing { "Playing" } else { "Paused" })
+                .state(&format!("{} - {}", video_data.title, video_data.artist))
+                .assets(
+                    acess.large_image(&video_data.album_art)
+                        .small_image(if data.is_playing { "play" } else { "pause" })
+                )
+                .timestamps(
+                    if data.is_playing {
+                        time_stam.start(start as i64).end(end as i64)
+                    } else {
+                        time_stam
+                    }
+                ).buttons(vec![activity::Button::new("Play on YouTube Music", &video_data.url)]),
+        )
+        .unwrap();
+    }
 }
 
 fn system_tray_event(app_handle: tauri::AppHandle, event: tauri::SystemTrayEvent) {
@@ -79,6 +68,7 @@ fn system_tray_event(app_handle: tauri::AppHandle, event: tauri::SystemTrayEvent
         }
         SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
             "quit" => {
+                DRPC_CLIENT.blocking_lock().close().unwrap();
                 std::process::exit(0);
             }
             _ => {}
@@ -87,7 +77,7 @@ fn system_tray_event(app_handle: tauri::AppHandle, event: tauri::SystemTrayEvent
     }
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 struct VideoData {
     pub title: String,
     pub artist: String,
@@ -97,7 +87,7 @@ struct VideoData {
     pub duration: f64,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 struct PlayerState {
     pub is_playing: bool,
     pub is_distroyed: bool,
@@ -105,17 +95,20 @@ struct PlayerState {
 }
 
 #[tauri::command]
-fn update_state(app_handle: tauri::AppHandle, data: PlayerState) {
-    let sender = app_handle.state::<UnboundedSender<PlayerState>>();
-    let _ = sender.send(data.clone());
+fn update_state(data: PlayerState) {
+    if PLAYER_STATE.blocking_read().is_some() {
+        let state = PLAYER_STATE.blocking_read().clone().unwrap();
+        if state == data {
+            return;
+        }
+    }
+    update_status(data.clone());
+    PLAYER_STATE.blocking_write().replace(data);
 }
 
 fn main() {
+    DRPC_CLIENT.blocking_lock().connect().unwrap();
     tauri::Builder::default()
-        .setup(|app| {
-            app.manage(create_discord_rpc());
-            Ok(())
-        })
         .system_tray(create_tray())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             app.get_window("main").unwrap().show().unwrap();
