@@ -1,4 +1,5 @@
-let events = [
+// This is list event youtube call when you change video or pause ...
+[
     "onPlaybackStartExternal",
     "onStateChange",
     "onReady",
@@ -10,16 +11,10 @@ let events = [
     "onVolumeChange",
     "onCaptionsModuleAvailable",
     "innertubeCommand",
-
-    // Use to get live time about video progress
-    // "onVideoProgress",
-    // "onLoadProgress",
-
-    // Show / Hide Control
-    // "onShowControls",
-    // "onHideControls",
-
-    // ads event
+    "onVideoProgress",
+    "onLoadProgress",
+    "onShowControls",
+    "onHideControls",
     "onAdStart",
     "onAdEnd",
     "onAdMetadataAvailable",
@@ -47,33 +42,36 @@ function get_video_info() {
 
 let last_update = 0;
 let last_duration = ytplayerapi.getCurrentTime();
+let last_send = null;
 
 async function update_state(event_id) {
-    last_update = Date.now();
     if (event_id == undefined) {
         event_id = ytplayerapi.getPlayerState()
     }
+    let data = null;
     if (event_id == 1) {
-        let data = {
+        data = {
             is_playing: true,
             is_distroyed: false,
             video_data: get_video_info()
         }
-        await tauri_api.invoke("update_state", { data: data });
     } else if (event_id == 2) {
-        let data = {
+        data = {
             is_playing: false,
             is_distroyed: false,
             video_data: get_video_info()
         }
-        await tauri_api.invoke("update_state", { data: data })
     } else if (event_id == -1 || event_id == 5) {
-        let data = {
+        data = {
             is_playing: false,
             is_distroyed: true
         }
-        await tauri_api.invoke("update_state", { data: data });
-    }
+    } else return;
+    console.log("update_state", last_send == data, last_send, data);
+    if (JSON.stringify(last_send) == JSON.stringify(data) && event_id != undefined) return
+    await tauri_api.invoke("update_state", { data: data });
+    last_send = data;
+    last_update = Date.now();
 }
 
 ytplayerapi.addEventListener("onStateChange", async (event) => {
@@ -87,8 +85,10 @@ setInterval(() => {
 }, 1000);
 
 ytplayerapi.addEventListener("onVideoProgress", async (event) => {
-    if (event - last_duration > 5) { 
-        update_state(event.state) 
+    let skip_time = event - last_duration;
+    console.log("skip_time", skip_time);
+    if (skip_time > 1 || skip_time < -1 || skip_time == 0) {
+        update_state()
     }
     last_duration = event;
 });
