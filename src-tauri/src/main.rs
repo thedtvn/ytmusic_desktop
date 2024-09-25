@@ -3,7 +3,7 @@
 use tauri::{
     CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use std::{sync::Arc, time::SystemTime};
 
@@ -13,7 +13,6 @@ use lazy_static::lazy_static;
 
 lazy_static! {
     static ref DRPC_CLIENT: Arc<Mutex<DiscordIpcClient>> = Arc::new(Mutex::new(DiscordIpcClient::new("1049275932239728672").unwrap()));
-    static ref PLAYER_STATE: Arc<RwLock<Option<PlayerState>>> = Arc::new(RwLock::new(None));
 }
 
 fn get_sys_time_in_secs() -> u64 {
@@ -96,14 +95,7 @@ struct PlayerState {
 
 #[tauri::command]
 fn update_state(data: PlayerState) {
-    if PLAYER_STATE.blocking_read().is_some() {
-        let state = PLAYER_STATE.blocking_read().clone().unwrap();
-        if state == data {
-            return;
-        }
-    }
     update_status(data.clone());
-    PLAYER_STATE.blocking_write().replace(data);
 }
 
 fn main() {

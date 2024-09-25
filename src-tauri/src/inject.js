@@ -67,7 +67,7 @@ async function update_state(event_id) {
             video_data: get_video_info()
         }
         await tauri_api.invoke("update_state", { data: data })
-    } else if (event_id == -1) {
+    } else if (event_id == -1 || event_id == 5) {
         let data = {
             is_playing: false,
             is_distroyed: true
