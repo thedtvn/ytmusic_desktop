@@ -99,7 +99,9 @@ fn update_state(data: PlayerState) {
 }
 
 fn main() {
-    DRPC_CLIENT.blocking_lock().connect().unwrap();
+    std::thread::spawn(move || {
+        DRPC_CLIENT.blocking_lock().connect();
+    })
     tauri::Builder::default()
         .system_tray(create_tray())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
