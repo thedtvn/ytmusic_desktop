@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/1",
   "build": {
-    "beforeBuildCommand": "mkdir dist | echo ' '",
-    "devPath": "https://music.youtube.com",
-    "distDir": "../dist"
+    "withGlobalTauri": true,
+    "devPath": "../src",
+    "distDir": "../src"
   },
   "package": {
     "productName": "Youtube Music",
@@ -21,8 +21,9 @@
       {
         "title": "Youtube Music",
         "label": "main",
-        "url": "https://music.youtube.com",
-        "theme": null
+        "url": "https://music.youtube.com/",
+        "theme": "Dark",
+        "additionalBrowserArgs": "--disable-web-security"
       }
     ],
     "security": {

@@ -9,12 +9,6 @@ use std::{sync::Arc, time::SystemTime};
 
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref DRPC_CLIENT: Arc<Mutex<DiscordIpcClient>> = Arc::new(Mutex::new(DiscordIpcClient::new("1049275932239728672").unwrap()));
-}
-
 fn get_sys_time_in_secs() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(n) => n.as_secs(),
@@ -28,18 +22,18 @@ fn create_tray() -> SystemTray {
     SystemTray::new().with_menu(tray_menu)
 }
 
-fn update_status(data: PlayerState) {
+fn update_status(dipc_client: Arc<Mutex<DiscordIpcClient>>, data: PlayerState) {
     println!("Update state: {:?}", data);
     let status_activity = activity::Activity::new();
     if data.is_distroyed {
-        DRPC_CLIENT.blocking_lock().set_activity(status_activity.details("idle not playing")).unwrap();
+        let _ = dipc_client.blocking_lock().set_activity(status_activity.details("idle not playing"));
     } else {
         let video_data = data.video_data.unwrap();
         let acess = activity::Assets::new();
         let time_stam = activity::Timestamps::new();
         let start = get_sys_time_in_secs() - video_data.current_duration as u64;
         let end = start + video_data.duration as u64;
-        DRPC_CLIENT.blocking_lock().set_activity(
+        let _ = dipc_client.blocking_lock().set_activity(
             status_activity.details("idle not playing")
                 .details(if data.is_playing { "Playing" } else { "Paused" })
                 .state(&format!("{} - {}", video_data.title, video_data.artist))
@@ -54,8 +48,7 @@ fn update_status(data: PlayerState) {
                         time_stam
                     }
                 ).buttons(vec![activity::Button::new("Play on YouTube Music", &video_data.url)]),
-        )
-        .unwrap();
+        );
     }
 }
 
@@ -67,7 +60,8 @@ fn system_tray_event(app_handle: tauri::AppHandle, event: tauri::SystemTrayEvent
         }
         SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
             "quit" => {
-                DRPC_CLIENT.blocking_lock().close().unwrap();
+                let dipc_client = app_handle.state::<Arc<Mutex<DiscordIpcClient>>>().inner();
+                dipc_client.blocking_lock().close().unwrap();
                 std::process::exit(0);
             }
             _ => {}
@@ -94,15 +88,21 @@ struct PlayerState {
 }
 
 #[tauri::command]
-fn update_state(data: PlayerState) {
-    update_status(data.clone());
+fn update_state(app: tauri::AppHandle, data: PlayerState) {
+    let dipc_client = app.state::<Arc<Mutex<DiscordIpcClient>>>().inner();
+    update_status(dipc_client.clone(), data.clone());
+    println!("Update state: {:?}", data);
 }
 
 fn main() {
+    let drpc_client = Arc::new(Mutex::new(DiscordIpcClient::new("1049275932239728672").unwrap()));
+    let drpc_client_th = drpc_client.clone();
     std::thread::spawn(move || {
-        let _ = DRPC_CLIENT.blocking_lock().connect();
+        drpc_client_th.blocking_lock().connect().unwrap();
+        println!("Connected to discord rpc");
     });
     tauri::Builder::default()
+        .manage(drpc_client)
         .system_tray(create_tray())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             app.get_window("main").unwrap().show().unwrap();
@@ -118,29 +118,35 @@ fn main() {
         })
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .on_page_load(|window, _page_load_payload| {
-            let inject_code = include_str!("inject.js");
-            let load_lib = include_str!("load_lib.js");
-            let js_script = format!(
-                "
+            let host = if cfg!(dev) { "http://localhost" } else { "https://tauri.localhost" };
+            let js_script = "
+            if (window.trustedTypes && window.trustedTypes.createPolicy) { // Feature testing
+                    window.trustedTypes.createPolicy('default', {
+                        createHTML: (string) => DOMPurify.sanitize(string, {RETURN_TRUSTED_TYPE: true}),
+                        createScriptURL: string => string, // warning: this is unsafe!
+                        createScript: string => string, // warning: this is unsafe!
+                    });
+                }
                 window.resolveLoad = null;
-                let done_load_script = new Promise((resolve) => {{
+                let done_load_script = new Promise((resolve) => {
                     window.resolveLoad = resolve;
-                }});
+                });
                 let script = document.createElement(\"script\");
                 script.type = \"module\";
-                script.innerHTML = `{}`;
+                script.src = \"https://tauri.localhost/js/load_lib.js\";
                 document.head.appendChild(script);
-                addEventListener(\"load\", async () => {{
+                addEventListener(\"load\", async () => {
                     await done_load_script;
-                    try {{
-                        {}
-                    }} catch (error) {{
+                    try {
+                        let script = document.createElement(\"script\");
+                        script.type = \"module\";
+                        script.src = \"https://tauri.localhost/js/inject.js\";
+                        document.head.appendChild(script);
+                    } catch (error) {
                         console.error(error);
-                    }}
-                }})
-            ",
-                load_lib, inject_code
-            );
+                    }
+                })
+            ";
             window.eval(&js_script).unwrap();
         })
         .invoke_handler(tauri::generate_handler![update_state])

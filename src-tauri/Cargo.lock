@@ -4368,7 +4368,6 @@ name = "ytmusic_desktop"
 version = "0.1.0"
 dependencies = [
  "discord-rich-presence",
- "lazy_static",
  "serde",
  "serde_json",
  "tauri",
