@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use tauri::{
-    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
+    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
 };
 use tokio::sync::Mutex;
 
@@ -17,8 +17,11 @@ fn get_sys_time_in_secs() -> u64 {
 }
 
 fn create_tray() -> SystemTray {
+    let previous = CustomMenuItem::new("previous".to_string(), "Previous Song");
+    let play_pause = CustomMenuItem::new("play_pause".to_string(), "Play");
+    let next = CustomMenuItem::new("next".to_string(), "Next Song");
     let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    let tray_menu = SystemTrayMenu::new().add_item(quit);
+    let tray_menu = SystemTrayMenu::new().add_item(previous).add_item(play_pause).add_item(next).add_native_item(SystemTrayMenuItem::Separator).add_item(quit);
     SystemTray::new().with_menu(tray_menu)
 }
 
@@ -55,15 +58,26 @@ fn update_status(dipc_client: Arc<Mutex<DiscordIpcClient>>, data: PlayerState) {
 fn system_tray_event(app_handle: tauri::AppHandle, event: tauri::SystemTrayEvent) {
     match event {
         SystemTrayEvent::LeftClick { .. } => {
-            app_handle.get_window("main").unwrap().show().unwrap();
-            app_handle.get_window("main").unwrap().set_focus().unwrap();
+            let main = app_handle.get_window("main").unwrap();
+            main.unminimize().unwrap();
+            main.show().unwrap();
+            main.set_focus().unwrap();
         }
         SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
             "quit" => {
                 let dipc_client = app_handle.state::<Arc<Mutex<DiscordIpcClient>>>().inner();
                 dipc_client.blocking_lock().close().unwrap();
                 std::process::exit(0);
-            }
+            },
+            "play_pause" => {
+                app_handle.emit_to("main", "control_player", "play_pause").unwrap();
+            },
+            "previous" => {
+                app_handle.emit_to("main", "control_player", "previous").unwrap();
+            },
+            "next" => {
+                app_handle.emit_to("main", "control_player", "next").unwrap();
+            },
             _ => {}
         },
         _ => {}
@@ -90,8 +104,14 @@ struct PlayerState {
 #[tauri::command]
 fn update_state(app: tauri::AppHandle, data: PlayerState) {
     let dipc_client = app.state::<Arc<Mutex<DiscordIpcClient>>>().inner();
+
+    app.tray_handle().get_item("play_pause").set_enabled(!data.is_distroyed).unwrap();
+    app.tray_handle().get_item("previous").set_enabled(!data.is_distroyed).unwrap();
+    app.tray_handle().get_item("next").set_enabled(!data.is_distroyed).unwrap();
+
+    app.tray_handle().get_item("play_pause").set_title(if data.is_playing { "Pause" } else { "Play" }).unwrap();
+
     update_status(dipc_client.clone(), data.clone());
-    println!("Update state: {:?}", data);
 }
 
 fn main() {
@@ -104,21 +124,23 @@ fn main() {
     tauri::Builder::default()
         .manage(drpc_client)
         .system_tray(create_tray())
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            app.get_window("main").unwrap().show().unwrap();
-            app.get_window("main").unwrap().set_focus().unwrap();
+        .plugin(tauri_plugin_single_instance::init(|app_handle, _, _| {
+            let main = app_handle.get_window("main").unwrap();
+            main.unminimize().unwrap();
+            main.show().unwrap();
+            main.set_focus().unwrap();
         }))
         .on_system_tray_event(|a, e| system_tray_event(a.clone(), e))
         .on_window_event(|event| match event.event() {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
+                event.window().minimize().unwrap();
                 event.window().hide().unwrap();
             }
             _ => {}
         })
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .on_page_load(|window, _page_load_payload| {
-            let host = if cfg!(dev) { "http://localhost" } else { "https://tauri.localhost" };
             let js_script = "
             if (window.trustedTypes && window.trustedTypes.createPolicy) { // Feature testing
                     window.trustedTypes.createPolicy('default', {

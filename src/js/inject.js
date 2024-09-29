@@ -44,8 +44,9 @@ let last_update = 0;
 let last_duration = ytplayerapi.getCurrentTime();
 let last_send = null;
 
-async function update_state(event_id) {
-    if (event_id == undefined) {
+async function update_state(event_id_input) {
+    let event_id = event_id_input;
+    if (event_id_input == undefined) {
         event_id = ytplayerapi.getPlayerState()
     }
     let data = null;
@@ -67,12 +68,26 @@ async function update_state(event_id) {
             is_distroyed: true
         }
     } else return;
-    console.log("update_state", last_send == data, last_send, data);
-    if (JSON.stringify(last_send) == JSON.stringify(data) && event_id != undefined) return
+    if (JSON.stringify(last_send) == JSON.stringify(data) && event_id_input != undefined) return
+    console.log("update_state", data, event_id_input != undefined);
     await tauri_api.invoke("update_state", { data: data });
     last_send = data;
     last_update = Date.now();
 }
+
+tauri_api.event.listen('control_player', (event) => {
+    if (event.payload == "play_pause") {
+        if (ytplayerapi.getPlayerState() == 1) {
+            ytplayerapi.pauseVideo();
+        } else {
+            ytplayerapi.playVideo();
+        }
+    } else if (event.payload == "next") {
+        ytplayerapi.nextVideo();
+    } else if (event.payload == "previous") {
+        ytplayerapi.previousVideo();
+    }
+});
 
 ytplayerapi.addEventListener("onStateChange", async (event) => {
     last_duration = ytplayerapi.getCurrentTime();
@@ -88,7 +103,7 @@ ytplayerapi.addEventListener("onVideoProgress", async (event) => {
     let skip_time = event - last_duration;
     console.log("skip_time", skip_time);
     if (skip_time > 1 || skip_time < -1 || skip_time == 0) {
-        update_state()
+        update_state(ytplayerapi.getPlayerState())
     }
     last_duration = event;
 });
