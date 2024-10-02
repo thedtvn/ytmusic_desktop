@@ -27,7 +27,7 @@ fn create_tray() -> SystemTray {
 
 fn update_status(dipc_client: Arc<Mutex<DiscordIpcClient>>, data: PlayerState) {
     println!("Update state: {:?}", data);
-    let status_activity = activity::Activity::new().activity_type(A);
+    let status_activity = activity::Activity::new().activity_type(activity::ActivityType::Listening);
     if data.is_distroyed {
         let _ = dipc_client.blocking_lock().set_activity(status_activity.details("idle not playing"));
     } else {
