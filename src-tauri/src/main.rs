@@ -38,8 +38,8 @@ fn update_status(dipc_client: Arc<Mutex<DiscordIpcClient>>, data: PlayerState) {
         let end = start + video_data.duration as u64;
         let _ = dipc_client.blocking_lock().set_activity(
             status_activity.details("idle not playing")
-                .details(if data.is_playing { "Playing" } else { "Paused" })
-                .state(&format!("{} - {}", video_data.title, video_data.artist))
+                .details(&video_data.title)
+                .state(&video_data.artist)
                 .assets(
                     acess.large_image(&video_data.album_art)
                         .small_image(if data.is_playing { "play" } else { "pause" })
