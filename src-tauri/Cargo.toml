@@ -16,7 +16,7 @@ serde = { version = "1", features = ["derive"] }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
 serde_json = "1"
-discord-rich-presence = "0.2.4"
+discord-rich-presence = { git = "https://github.com/thedtvn/discord-rich-presence" }
 tokio = { version = "1.40.0", features = ["sync"] }
 
 [features]
